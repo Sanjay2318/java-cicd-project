@@ -106,7 +106,7 @@ jobs:
             "$JAR_FILE" \
             "$EC2_USERNAME@$EC2_HOST:/tmp/app.jar"
 
-      # Step 8: Restart Java application on EC2
+      # Step 8: Restart Java application and wait for health check
       - name: Deploy and restart application
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -115,12 +115,34 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
             "$EC2_USERNAME@$EC2_HOST" \
             'set -e
-             sudo systemctl stop java-app || true
-             cp /tmp/app.jar /opt/java-app/app.jar
+
+             echo "Restarting Java application..."
+
              sudo systemctl restart java-app
-             sudo systemctl is-active --quiet java-app
-             curl --fail http://localhost:8080/health
-             echo "Deployment successful!"'
+
+             echo "Waiting for application to become healthy..."
+
+             for i in $(seq 1 10); do
+
+               if curl --fail --silent http://localhost:8080/health; then
+                 echo ""
+                 echo "Application is healthy!"
+                 echo "Deployment successful!"
+                 exit 0
+               fi
+
+               echo "Attempt $i: Application not ready yet..."
+               sleep 3
+
+             done
+
+             echo "Application failed to become healthy!"
+
+             sudo systemctl status java-app --no-pager -l || true
+
+             sudo journalctl -u java-app -n 50 --no-pager || true
+
+             exit 1'
 
       # Step 9: Clean up SSH private key
       - name: Clean up SSH key
