@@ -1,35 +1,95 @@
 
 package com.example;
 
+import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpExchange;
+
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+
 public class App {
 
-    public double add(double a, double b) {
+    // Existing calculator methods
+    public static double add(double a, double b) {
         return a + b;
     }
 
-    public double subtract(double a, double b) {
+    public static double subtract(double a, double b) {
         return a - b;
     }
 
-    public double multiply(double a, double b) {
+    public static double multiply(double a, double b) {
         return a * b;
     }
 
-    public double divide(double a, double b) {
+    public static double divide(double a, double b) {
         if (b == 0) {
             throw new IllegalArgumentException("Cannot divide by zero");
         }
         return a / b;
     }
 
-    public static void main(String[] args) {
+    // Send HTTP response
+    private static void sendResponse(
+            HttpExchange exchange,
+            int statusCode,
+            String response
+    ) throws IOException {
 
-        App calculator = new App();
+        byte[] responseBytes =
+                response.getBytes(StandardCharsets.UTF_8);
 
-        System.out.println("===== Java CI/CD Calculator =====");
-        System.out.println("Addition: " + calculator.add(10, 5));
-        System.out.println("Subtraction: " + calculator.subtract(10, 5));
-        System.out.println("Multiplication: " + calculator.multiply(10, 5));
-        System.out.println("Division: " + calculator.divide(10, 5));
+        exchange.getResponseHeaders().set(
+                "Content-Type",
+                "text/plain; charset=UTF-8"
+        );
+
+        exchange.sendResponseHeaders(
+                statusCode,
+                responseBytes.length
+        );
+
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(responseBytes);
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+
+        // Start HTTP server on port 8080
+        HttpServer server = HttpServer.create(
+                new InetSocketAddress("0.0.0.0", 8080),
+                0
+        );
+
+        // Health check endpoint
+        server.createContext("/health", exchange -> {
+            sendResponse(exchange, 200, "Application is healthy!");
+        });
+
+        // Home endpoint
+        server.createContext("/", exchange -> {
+
+            String response =
+                    "================================\n" +
+                    "     JAVA CI/CD CALCULATOR\n" +
+                    "================================\n\n" +
+                    "Addition: " + add(10, 5) + "\n" +
+                    "Subtraction: " + subtract(10, 5) + "\n" +
+                    "Multiplication: " + multiply(10, 5) + "\n" +
+                    "Division: " + divide(10, 5) + "\n\n" +
+                    "Application deployed successfully!\n";
+
+            sendResponse(exchange, 200, response);
+        });
+
+        server.setExecutor(null);
+        server.start();
+
+        System.out.println(
+                "Java Calculator Server started on port 8080"
+        );
     }
 }
