@@ -11,7 +11,8 @@ import java.nio.charset.StandardCharsets;
 
 public class App {
 
-    // Existing calculator methods
+    // Calculator methods
+
     public static double add(double a, double b) {
         return a + b;
     }
@@ -32,6 +33,7 @@ public class App {
     }
 
     // Send HTTP response
+
     private static void sendResponse(
             HttpExchange exchange,
             int statusCode,
@@ -56,17 +58,22 @@ public class App {
         }
     }
 
-    public static void main(String[] args) throws IOException {
+    // Create HTTP server
 
-        // Start HTTP server on port 8080
+    public static HttpServer createServer(int port) throws IOException {
+
         HttpServer server = HttpServer.create(
-                new InetSocketAddress("0.0.0.0", 8080),
+                new InetSocketAddress("0.0.0.0", port),
                 0
         );
 
-        // Health check endpoint
+        // Health endpoint
         server.createContext("/health", exchange -> {
-            sendResponse(exchange, 200, "Application is healthy!");
+            sendResponse(
+                    exchange,
+                    200,
+                    "Application is healthy!"
+            );
         });
 
         // Home endpoint
@@ -86,6 +93,16 @@ public class App {
         });
 
         server.setExecutor(null);
+
+        return server;
+    }
+
+    // Main method
+
+    public static void main(String[] args) throws IOException {
+
+        HttpServer server = createServer(8080);
+
         server.start();
 
         System.out.println(

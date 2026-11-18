@@ -1,3 +1,4 @@
+
 name: 02 - SonarQube Analysis
 
 on:
@@ -27,6 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -49,6 +51,7 @@ jobs:
             -Dsonar.projectKey=Java-CI-CD-Project \
             -Dsonar.host.url="$SONAR_HOST_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.qualitygate.wait=true
 
       - name: Upload JAR artifact for Pipeline 3
