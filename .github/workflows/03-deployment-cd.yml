@@ -1,0 +1,127 @@
+
+name: 03 - GitHub Packages and EC2 Deployment
+
+on:
+  workflow_run:
+    workflows:
+      - "02 - SonarQube Analysis"
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    name: Publish Package and Deploy to EC2
+
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    runs-on: [self-hosted, Linux, X64, sonar-runner]
+
+    steps:
+      # Step 1: Checkout the exact commit analyzed by SonarQube
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      # Step 2: Configure Java and Maven authentication
+      - name: Set up Java 17 and GitHub Packages authentication
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      # Step 3: Verify Java and Maven
+      - name: Verify Java and Maven
+        run: |
+          java -version
+          mvn -version
+
+      # Step 4: Download JAR from Pipeline 2
+      - name: Download JAR from SonarQube workflow
+        uses: actions/download-artifact@v4
+        with:
+          name: java-app-jar
+          github-token: ${{ github.token }}
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.repository }}
+          path: ./artifact
+
+      # Step 5: Publish Maven package to GitHub Packages
+      - name: Publish Maven package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          mvn -B deploy -DskipTests
+
+      # Step 6: Prepare SSH authentication
+      - name: Configure SSH connection
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # Step 7: Transfer JAR to EC2
+      - name: Copy application JAR to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          JAR_FILE=$(find artifact -maxdepth 1 -type f -name '*.jar' \
+            ! -name '*-sources.jar' \
+            ! -name '*-javadoc.jar' | head -n 1)
+
+          if [ -z "$JAR_FILE" ]; then
+            echo "No application JAR found!"
+            exit 1
+          fi
+
+          echo "Deploying: $JAR_FILE"
+
+          scp -i ~/.ssh/deploy_key \
+            "$JAR_FILE" \
+            "$EC2_USERNAME@$EC2_HOST:/tmp/app.jar"
+
+      # Step 8: Restart Java application on EC2
+      - name: Deploy and restart application
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            "$EC2_USERNAME@$EC2_HOST" \
+            'set -e
+             sudo systemctl stop java-app || true
+             cp /tmp/app.jar /opt/java-app/app.jar
+             sudo systemctl restart java-app
+             sudo systemctl is-active --quiet java-app
+             curl --fail http://localhost:8080/health
+             echo "Deployment successful!"'
+
+      # Step 9: Clean up SSH private key
+      - name: Clean up SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key
