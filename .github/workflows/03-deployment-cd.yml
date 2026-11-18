@@ -17,17 +17,17 @@ jobs:
   deploy:
     name: Publish Package and Deploy to EC2
 
-    
-if: >-
-  github.event.workflow_run.conclusion == 'success' &&
-  github.event.workflow_run.event == 'workflow_run' &&
-  github.event.workflow_run.head_branch == 'main' &&
-  github.event.workflow_run.head_repository.full_name == github.repository
-
+    # Run only after successful SonarQube analysis
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_run' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
 
     runs-on: [self-hosted, Linux, X64, sonar-runner]
 
     steps:
+
       # Step 1: Checkout the exact commit analyzed by SonarQube
       - name: Checkout source code
         uses: actions/checkout@v4
