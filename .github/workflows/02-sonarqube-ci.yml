@@ -1,4 +1,4 @@
-
+```yaml
 name: 02 - SonarQube Analysis
 
 on:
@@ -46,7 +46,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          mvn -B clean verify sonar:sonar \
+          mvn -B clean verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=java-cicd-project \
             -Dsonar.host.url="$SONAR_HOST_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
@@ -59,3 +59,4 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
           retention-days: 7
+```
